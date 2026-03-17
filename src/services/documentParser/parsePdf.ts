@@ -1,3 +1,4 @@
+// @ts-ignore - pdfjs-dist types not available
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Set worker
