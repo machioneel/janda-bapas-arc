@@ -205,7 +205,7 @@ export default function UploadPage() {
                     {metadata && getConfidenceIndicator(metadata[key].confidence)}
                   </div>
                   <Input
-                    type={type || 'text'}
+                    type={inputType}
                     value={form[key]}
                     onChange={(e) => setForm({ ...form, [key]: e.target.value })}
                   />
