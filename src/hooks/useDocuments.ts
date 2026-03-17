@@ -1,0 +1,91 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import type { DocumentRecord, DocumentType } from '@/types/document';
+
+interface DocumentFilters {
+  search?: string;
+  type?: DocumentType | '';
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export function useDocuments(filters: DocumentFilters = {}) {
+  const { search, type, dateFrom, dateTo, page = 1, pageSize = 20 } = filters;
+
+  return useQuery({
+    queryKey: ['documents', filters],
+    queryFn: async () => {
+      let query = supabase
+        .from('documents')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range((page - 1) * pageSize, page * pageSize - 1);
+
+      if (search) {
+        query = query.or(`letter_number.ilike.%${search}%,sender.ilike.%${search}%,receiver.ilike.%${search}%,subject.ilike.%${search}%`);
+      }
+      if (type) {
+        query = query.eq('document_type', type);
+      }
+      if (dateFrom) {
+        query = query.gte('letter_date', dateFrom);
+      }
+      if (dateTo) {
+        query = query.lte('letter_date', dateTo);
+      }
+
+      const { data, error, count } = await query;
+      if (error) throw error;
+      return { documents: data as DocumentRecord[], total: count ?? 0 };
+    },
+  });
+}
+
+export function useDocumentById(id: string) {
+  return useQuery({
+    queryKey: ['document', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      return data as DocumentRecord;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useCreateDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (doc: Omit<DocumentRecord, 'id' | 'created_at'>) => {
+      const { data, error } = await supabase
+        .from('documents')
+        .insert(doc)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+    },
+  });
+}
+
+export function useDeleteDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('documents').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+    },
+  });
+}
