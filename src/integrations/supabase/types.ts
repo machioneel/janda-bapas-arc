@@ -14,13 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      documents: {
+        Row: {
+          classification: string
+          created_at: string
+          document_type: string
+          file_name: string
+          file_url: string
+          id: string
+          letter_date: string | null
+          letter_number: string
+          receiver: string
+          sender: string
+          subject: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          classification?: string
+          created_at?: string
+          document_type: string
+          file_name?: string
+          file_url: string
+          id?: string
+          letter_date?: string | null
+          letter_number?: string
+          receiver?: string
+          sender?: string
+          subject?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          classification?: string
+          created_at?: string
+          document_type?: string
+          file_name?: string
+          file_url?: string
+          id?: string
+          letter_date?: string | null
+          letter_number?: string
+          receiver?: string
+          sender?: string
+          subject?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
+      employees: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          is_active: boolean
+          name: string
+          nip: string
+          position: string
+          role: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id: string
+          is_active?: boolean
+          name: string
+          nip: string
+          position?: string
+          role?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          nip?: string
+          position?: string
+          role?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
