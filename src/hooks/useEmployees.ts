@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { Employee, UserRole } from '@/types/employee';
+import type { UserRole } from '@/types/employee';
 
 export function useEmployees() {
   return useQuery({
@@ -11,7 +11,7 @@ export function useEmployees() {
         .select('*')
         .order('name');
       if (error) throw error;
-      return data as Employee[];
+      return data;
     },
   });
 }
@@ -35,7 +35,7 @@ export function useUpdateEmployeeRole() {
 export function useUpdateEmployee() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<Employee> & { id: string }) => {
+    mutationFn: async ({ id, ...updates }: { id: string; name?: string; position?: string; is_active?: boolean }) => {
       const { error } = await supabase
         .from('employees')
         .update(updates)

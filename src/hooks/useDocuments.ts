@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { DocumentRecord, DocumentType } from '@/types/document';
+import type { DocumentType } from '@/types/document';
 
 interface DocumentFilters {
   search?: string;
@@ -38,7 +38,7 @@ export function useDocuments(filters: DocumentFilters = {}) {
 
       const { data, error, count } = await query;
       if (error) throw error;
-      return { documents: data as DocumentRecord[], total: count ?? 0 };
+      return { documents: data ?? [], total: count ?? 0 };
     },
   });
 }
@@ -53,7 +53,7 @@ export function useDocumentById(id: string) {
         .eq('id', id)
         .single();
       if (error) throw error;
-      return data as DocumentRecord;
+      return data;
     },
     enabled: !!id,
   });
@@ -62,7 +62,18 @@ export function useDocumentById(id: string) {
 export function useCreateDocument() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (doc: Omit<DocumentRecord, 'id' | 'created_at'>) => {
+    mutationFn: async (doc: {
+      document_type: string;
+      letter_number: string;
+      letter_date: string | null;
+      sender: string;
+      receiver: string;
+      subject: string;
+      classification: string;
+      file_url: string;
+      file_name: string;
+      uploaded_by: string | null;
+    }) => {
       const { data, error } = await supabase
         .from('documents')
         .insert(doc)

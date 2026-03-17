@@ -14,7 +14,18 @@ export function useAuth() {
       .select('*')
       .eq('id', userId)
       .single();
-    if (data) setEmployee(data as Employee);
+    if (data) {
+      setEmployee({
+        id: data.id,
+        name: data.name,
+        nip: data.nip,
+        position: data.position,
+        email: data.email,
+        role: data.role as Employee['role'],
+        is_active: data.is_active,
+        created_at: data.created_at,
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -42,7 +53,6 @@ export function useAuth() {
   }, [fetchEmployee]);
 
   const loginWithNip = async (nip: string, password: string) => {
-    // Look up email by NIP
     const { data: emp, error: lookupError } = await supabase
       .from('employees')
       .select('email')
