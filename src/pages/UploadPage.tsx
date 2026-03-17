@@ -192,13 +192,13 @@ export default function UploadPage() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {([
-                { key: 'letter_number', label: 'Nomor Surat' },
-                { key: 'letter_date', label: 'Tanggal Surat', type: 'date' },
-                { key: 'sender', label: 'Pengirim' },
-                { key: 'receiver', label: 'Penerima' },
-                { key: 'subject', label: 'Perihal' },
-                { key: 'classification', label: 'Sifat / Klasifikasi' },
-              ] as const).map(({ key, label, type }) => (
+                { key: 'letter_number' as const, label: 'Nomor Surat', inputType: 'text' },
+                { key: 'letter_date' as const, label: 'Tanggal Surat', inputType: 'date' },
+                { key: 'sender' as const, label: 'Pengirim', inputType: 'text' },
+                { key: 'receiver' as const, label: 'Penerima', inputType: 'text' },
+                { key: 'subject' as const, label: 'Perihal', inputType: 'text' },
+                { key: 'classification' as const, label: 'Sifat / Klasifikasi', inputType: 'text' },
+              ]).map(({ key, label, inputType }) => (
                 <div key={key} className={`space-y-1 ${metadata && metadata[key].confidence > 0 && metadata[key].confidence < 0.7 ? 'confidence-low' : metadata && metadata[key].confidence >= 0.7 ? 'confidence-high' : ''} pl-2`}>
                   <div className="flex items-center gap-2">
                     <Label>{label}</Label>
