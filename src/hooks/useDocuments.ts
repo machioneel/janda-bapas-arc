@@ -5,6 +5,9 @@ import type { DocumentType } from '@/types/document';
 interface DocumentFilters {
   search?: string;
   type?: DocumentType | '';
+  year?: string;
+  sender?: string;
+  receiver?: string;
   dateFrom?: string;
   dateTo?: string;
   page?: number;
