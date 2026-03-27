@@ -15,7 +15,7 @@ interface DocumentFilters {
 }
 
 export function useDocuments(filters: DocumentFilters = {}) {
-  const { search, type, dateFrom, dateTo, page = 1, pageSize = 20 } = filters;
+  const { search, type, year, sender, receiver, dateFrom, dateTo, page = 1, pageSize = 20 } = filters;
 
   return useQuery({
     queryKey: ['documents', filters],
@@ -31,6 +31,15 @@ export function useDocuments(filters: DocumentFilters = {}) {
       }
       if (type) {
         query = query.eq('document_type', type);
+      }
+      if (year) {
+        query = query.gte('letter_date', `${year}-01-01`).lte('letter_date', `${year}-12-31`);
+      }
+      if (sender) {
+        query = query.ilike('sender', `%${sender}%`);
+      }
+      if (receiver) {
+        query = query.ilike('receiver', `%${receiver}%`);
       }
       if (dateFrom) {
         query = query.gte('letter_date', dateFrom);
