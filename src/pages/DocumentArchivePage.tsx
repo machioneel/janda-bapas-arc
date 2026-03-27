@@ -4,19 +4,38 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Eye, Filter, X } from 'lucide-react';
 import type { DocumentType } from '@/types/document';
+
+const currentYear = new Date().getFullYear();
+const yearOptions = Array.from({ length: 10 }, (_, i) => currentYear - i);
 
 export default function DocumentArchivePage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [type, setType] = useState<DocumentType | ''>('');
+  const [year, setYear] = useState('');
+  const [sender, setSender] = useState('');
+  const [receiver, setReceiver] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useDocuments({ search, type, page, pageSize: 15 });
+  const { data, isLoading } = useDocuments({
+    search, type, year, sender, receiver, dateFrom, dateTo, page, pageSize: 15,
+  });
   const totalPages = Math.ceil((data?.total ?? 0) / 15);
+
+  const activeFilterCount = [type, year, sender, receiver, dateFrom, dateTo].filter(Boolean).length;
+
+  const clearFilters = () => {
+    setType(''); setYear(''); setSender(''); setReceiver(''); setDateFrom(''); setDateTo('');
+    setPage(1);
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -26,27 +45,97 @@ export default function DocumentArchivePage() {
       </div>
 
       <Card className="border-border">
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Cari nomor surat, pengirim, perihal..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="pl-10"
-              />
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Cari nomor surat, pengirim, perihal..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  className="pl-10"
+                />
+              </div>
+              <Button
+                variant={showFilters ? 'default' : 'outline'}
+                onClick={() => setShowFilters(!showFilters)}
+                className="gap-2"
+              >
+                <Filter className="w-4 h-4" />
+                Filter
+                {activeFilterCount > 0 && (
+                  <span className="ml-1 bg-primary-foreground text-primary text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
             </div>
-            <Select value={type} onValueChange={(v) => { setType(v as DocumentType | ''); setPage(1); }}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Semua Jenis" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Jenis</SelectItem>
-                <SelectItem value="incoming">Surat Masuk</SelectItem>
-                <SelectItem value="outgoing">Surat Keluar</SelectItem>
-              </SelectContent>
-            </Select>
+
+            {showFilters && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4 rounded-lg bg-muted/30 border border-border">
+                <div className="space-y-1">
+                  <Label className="text-xs">Jenis Surat</Label>
+                  <Select value={type || 'all'} onValueChange={(v) => { setType(v === 'all' ? '' : v as DocumentType); setPage(1); }}>
+                    <SelectTrigger><SelectValue placeholder="Semua Jenis" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua Jenis</SelectItem>
+                      <SelectItem value="incoming">Surat Masuk</SelectItem>
+                      <SelectItem value="outgoing">Surat Keluar</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Tahun</Label>
+                  <Select value={year || 'all'} onValueChange={(v) => { setYear(v === 'all' ? '' : v); setPage(1); }}>
+                    <SelectTrigger><SelectValue placeholder="Semua Tahun" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua Tahun</SelectItem>
+                      {yearOptions.map(y => (
+                        <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Pengirim</Label>
+                  <Input
+                    placeholder="Filter pengirim..."
+                    value={sender}
+                    onChange={e => { setSender(e.target.value); setPage(1); }}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Penerima</Label>
+                  <Input
+                    placeholder="Filter penerima..."
+                    value={receiver}
+                    onChange={e => { setReceiver(e.target.value); setPage(1); }}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Dari Tanggal</Label>
+                  <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Sampai Tanggal</Label>
+                  <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
+                </div>
+
+                {activeFilterCount > 0 && (
+                  <div className="sm:col-span-2 lg:col-span-3 flex justify-end">
+                    <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-muted-foreground">
+                      <X className="w-3 h-3" /> Hapus semua filter
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -94,11 +183,7 @@ export default function DocumentArchivePage() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/documents/${doc.id}`)}
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => navigate(`/documents/${doc.id}`)}>
                           <Eye className="w-4 h-4" />
                         </Button>
                       </TableCell>
