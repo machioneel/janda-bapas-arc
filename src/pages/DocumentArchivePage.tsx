@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useDocuments } from '@/hooks/useDocuments';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, ChevronLeft, ChevronRight, Eye, Filter, X } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Eye, Filter, X, Download } from 'lucide-react';
+import { toast } from 'sonner';
 import type { DocumentType } from '@/types/document';
 
 const currentYear = new Date().getFullYear();
@@ -24,6 +26,7 @@ export default function DocumentArchivePage() {
   const [dateTo, setDateTo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
 
   const { data, isLoading } = useDocuments({
     search, type, year, sender, receiver, dateFrom, dateTo, page, pageSize: 15,
@@ -37,11 +40,73 @@ export default function DocumentArchivePage() {
     setPage(1);
   };
 
+  const handleExport = useCallback(async (format: 'csv' | 'xlsx') => {
+    setExporting(true);
+    try {
+      // Fetch all matching documents (up to 5000)
+      let query = supabase
+        .from('documents')
+        .select('letter_number, letter_date, sender, receiver, subject, classification, document_type, file_name, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5000);
+
+      if (search) query = query.or(`letter_number.ilike.%${search}%,sender.ilike.%${search}%,receiver.ilike.%${search}%,subject.ilike.%${search}%`);
+      if (type) query = query.eq('document_type', type);
+      if (year) query = query.gte('letter_date', `${year}-01-01`).lte('letter_date', `${year}-12-31`);
+      if (sender) query = query.ilike('sender', `%${sender}%`);
+      if (receiver) query = query.ilike('receiver', `%${receiver}%`);
+      if (dateFrom) query = query.gte('letter_date', dateFrom);
+      if (dateTo) query = query.lte('letter_date', dateTo);
+
+      const { data: docs, error } = await query;
+      if (error) throw error;
+      if (!docs || docs.length === 0) { toast.error('Tidak ada data untuk diekspor'); return; }
+
+      const headers = ['No. Surat', 'Tanggal', 'Pengirim', 'Penerima', 'Perihal', 'Klasifikasi', 'Jenis', 'Nama File', 'Tanggal Upload'];
+      const rows = docs.map(d => [
+        d.letter_number,
+        d.letter_date || '',
+        d.sender,
+        d.receiver,
+        d.subject,
+        d.classification,
+        d.document_type === 'incoming' ? 'Surat Masuk' : 'Surat Keluar',
+        d.file_name,
+        new Date(d.created_at).toLocaleDateString('id-ID'),
+      ]);
+
+      const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `arsip_dokumen_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`${docs.length} data berhasil diekspor`);
+    } catch (err: any) {
+      toast.error('Gagal mengekspor data');
+      console.error(err);
+    } finally {
+      setExporting(false);
+    }
+  }, [search, type, year, sender, receiver, dateFrom, dateTo]);
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Arsip Dokumen</h1>
-        <p className="text-muted-foreground">Cari dan kelola arsip surat</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Arsip Dokumen</h1>
+          <p className="text-muted-foreground">Cari dan kelola arsip surat</p>
+        </div>
+        <Button variant="outline" className="gap-2" disabled={exporting} onClick={() => handleExport('csv')}>
+          <Download className="w-4 h-4" />
+          {exporting ? 'Mengekspor...' : 'Export CSV'}
+        </Button>
       </div>
 
       <Card className="border-border">
@@ -85,7 +150,6 @@ export default function DocumentArchivePage() {
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div className="space-y-1">
                   <Label className="text-xs">Tahun</Label>
                   <Select value={year || 'all'} onValueChange={(v) => { setYear(v === 'all' ? '' : v); setPage(1); }}>
@@ -98,35 +162,22 @@ export default function DocumentArchivePage() {
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div className="space-y-1">
                   <Label className="text-xs">Pengirim</Label>
-                  <Input
-                    placeholder="Filter pengirim..."
-                    value={sender}
-                    onChange={e => { setSender(e.target.value); setPage(1); }}
-                  />
+                  <Input placeholder="Filter pengirim..." value={sender} onChange={e => { setSender(e.target.value); setPage(1); }} />
                 </div>
-
                 <div className="space-y-1">
                   <Label className="text-xs">Penerima</Label>
-                  <Input
-                    placeholder="Filter penerima..."
-                    value={receiver}
-                    onChange={e => { setReceiver(e.target.value); setPage(1); }}
-                  />
+                  <Input placeholder="Filter penerima..." value={receiver} onChange={e => { setReceiver(e.target.value); setPage(1); }} />
                 </div>
-
                 <div className="space-y-1">
                   <Label className="text-xs">Dari Tanggal</Label>
                   <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
                 </div>
-
                 <div className="space-y-1">
                   <Label className="text-xs">Sampai Tanggal</Label>
                   <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
                 </div>
-
                 {activeFilterCount > 0 && (
                   <div className="sm:col-span-2 lg:col-span-3 flex justify-end">
                     <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-muted-foreground">
@@ -155,15 +206,11 @@ export default function DocumentArchivePage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      Memuat data...
-                    </TableCell>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Memuat data...</TableCell>
                   </TableRow>
                 ) : data?.documents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      Tidak ada dokumen ditemukan
-                    </TableCell>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Tidak ada dokumen ditemukan</TableCell>
                   </TableRow>
                 ) : (
                   data?.documents.map((doc, i) => (
@@ -175,9 +222,7 @@ export default function DocumentArchivePage() {
                       <TableCell className="text-sm max-w-[200px] truncate">{doc.subject || '-'}</TableCell>
                       <TableCell>
                         <span className={`text-xs px-2 py-1 rounded-sm font-medium ${
-                          doc.document_type === 'incoming'
-                            ? 'bg-accent/10 text-accent'
-                            : 'bg-warning/10 text-warning'
+                          doc.document_type === 'incoming' ? 'bg-accent/10 text-accent' : 'bg-warning/10 text-warning'
                         }`}>
                           {doc.document_type === 'incoming' ? 'Masuk' : 'Keluar'}
                         </span>
