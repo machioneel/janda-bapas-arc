@@ -11,223 +11,215 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import FileUploadZone, { type UploadFileItem } from '@/components/upload/FileUploadZone';
 import MetadataForm, { type MetadataFormValues } from '@/components/upload/MetadataForm';
+import MultiUploadPanel from '@/components/upload/MultiUploadPanel';
+import { Upload, FileText, X, Loader2, CheckCircle, Files } from 'lucide-react';
 
 const emptyForm: MetadataFormValues = {
   letter_number: '', letter_date: '', sender: '', receiver: '', subject: '', classification: '',
 };
 
+type SingleStatus = 'idle' | 'extracting' | 'ready' | 'uploading' | 'done' | 'error';
+
 export default function UploadPage() {
   const { user } = useAuth();
   const createDocument = useCreateDocument();
 
-  const [files, setFiles] = useState<UploadFileItem[]>([]);
-  const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  const [mode, setMode] = useState<'single' | 'multi'>('single');
+
+  // Single upload state
+  const [singleFile, setSingleFile] = useState<File | null>(null);
+  const [singleStatus, setSingleStatus] = useState<SingleStatus>('idle');
+  const [singleExtracted, setSingleExtracted] = useState<ExtractedMetadata | null>(null);
+  const [singleForm, setSingleForm] = useState<MetadataFormValues>(emptyForm);
   const [docType, setDocType] = useState<'incoming' | 'outgoing'>('incoming');
-  const [metadataMap, setMetadataMap] = useState<Record<string, { extracted: ExtractedMetadata | null; form: MetadataFormValues }>>({});
   const [saving, setSaving] = useState(false);
 
-  const activeFile = files.find(f => f.id === activeFileId);
-  const activeData = activeFileId ? metadataMap[activeFileId] : null;
-
-  const extractFile = useCallback(async (item: UploadFileItem) => {
+  const handleSingleFile = useCallback(async (file: File) => {
+    setSingleFile(file);
+    setSingleStatus('extracting');
+    setSingleExtracted(null);
+    setSingleForm(emptyForm);
     try {
-      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'extracting' as const } : f));
       let text = '';
-      const ext = item.file.name.split('.').pop()?.toLowerCase();
-      if (ext === 'pdf') text = await parsePdf(item.file);
-      else if (ext === 'docx') text = await parseDocx(item.file);
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') text = await parsePdf(file);
+      else if (ext === 'docx') text = await parseDocx(file);
       else throw new Error('Format tidak didukung');
 
       const extracted = extractMetadata(text);
-      setMetadataMap(prev => ({
-        ...prev,
-        [item.id]: {
-          extracted,
-          form: {
-            letter_number: extracted.letter_number.value,
-            letter_date: extracted.letter_date.value,
-            sender: extracted.sender.value,
-            receiver: extracted.receiver.value,
-            subject: extracted.subject.value,
-            classification: extracted.classification.value,
-          },
-        },
-      }));
-      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'ready' as const } : f));
+      setSingleExtracted(extracted);
+      setSingleForm({
+        letter_number: extracted.letter_number.value,
+        letter_date: extracted.letter_date.value,
+        sender: extracted.sender.value,
+        receiver: extracted.receiver.value,
+        subject: extracted.subject.value,
+        classification: extracted.classification.value,
+      });
+      setSingleStatus('ready');
     } catch (err) {
       console.error('Extraction error:', err);
-      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error' as const, error: 'Gagal ekstrak' } : f));
+      setSingleStatus('error');
     }
   }, []);
 
-  const handleFilesAdded = useCallback((newFiles: File[]) => {
-    const items: UploadFileItem[] = newFiles.map(file => ({
-      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      file,
-      status: 'pending' as const,
-    }));
-    setFiles(prev => [...prev, ...items]);
-    if (!activeFileId && items.length > 0) setActiveFileId(items[0].id);
-    // Extract all
-    items.forEach(item => extractFile(item));
-  }, [activeFileId, extractFile]);
+  const handleSingleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const file = Array.from(e.dataTransfer.files).find(f => {
+      const ext = f.name.split('.').pop()?.toLowerCase();
+      return ext === 'pdf' || ext === 'docx';
+    });
+    if (file) handleSingleFile(file);
+  }, [handleSingleFile]);
 
-  const handleRemoveFile = useCallback((id: string) => {
-    setFiles(prev => prev.filter(f => f.id !== id));
-    setMetadataMap(prev => { const n = { ...prev }; delete n[id]; return n; });
-    if (activeFileId === id) {
-      setActiveFileId(prev => {
-        const remaining = files.filter(f => f.id !== id);
-        return remaining.length > 0 ? remaining[0].id : null;
-      });
-    }
-  }, [activeFileId, files]);
+  const handleSingleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleSingleFile(file);
+    e.target.value = '';
+  }, [handleSingleFile]);
 
-  const updateForm = useCallback((form: MetadataFormValues) => {
-    if (!activeFileId) return;
-    setMetadataMap(prev => ({
-      ...prev,
-      [activeFileId]: { ...prev[activeFileId], form },
-    }));
-  }, [activeFileId]);
-
-  const handleSubmitAll = async () => {
-    if (!user) return;
-    const readyFiles = files.filter(f => f.status === 'ready');
-    if (readyFiles.length === 0) {
-      toast.error('Tidak ada file yang siap diunggah');
-      return;
-    }
-
+  const handleSingleSubmit = async () => {
+    if (!user || !singleFile || singleStatus !== 'ready') return;
     setSaving(true);
-    let successCount = 0;
-    let errorCount = 0;
+    setSingleStatus('uploading');
+    try {
+      const fileName = `${Date.now()}_${singleFile.name}`;
+      const { error: uploadError } = await supabase.storage.from('bapas-documents').upload(fileName, singleFile);
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from('bapas-documents').getPublicUrl(fileName);
 
-    for (const item of readyFiles) {
-      try {
-        setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'uploading' as const } : f));
-        const fileName = `${Date.now()}_${item.file.name}`;
-        const { error: uploadError } = await supabase.storage.from('bapas-documents').upload(fileName, item.file);
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage.from('bapas-documents').getPublicUrl(fileName);
-        const form = metadataMap[item.id]?.form ?? emptyForm;
-
-        await createDocument.mutateAsync({
-          document_type: docType,
-          letter_number: form.letter_number,
-          letter_date: form.letter_date || null,
-          sender: form.sender,
-          receiver: form.receiver,
-          subject: form.subject,
-          classification: form.classification,
-          file_url: urlData.publicUrl,
-          file_name: item.file.name,
-          uploaded_by: user.id,
-        });
-
-        setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'done' as const } : f));
-        successCount++;
-      } catch (err: any) {
-        console.error(err);
-        setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error' as const, error: err.message } : f));
-        errorCount++;
-      }
+      await createDocument.mutateAsync({
+        document_type: docType,
+        letter_number: singleForm.letter_number,
+        letter_date: singleForm.letter_date || null,
+        sender: singleForm.sender,
+        receiver: singleForm.receiver,
+        subject: singleForm.subject,
+        classification: singleForm.classification,
+        file_url: urlData.publicUrl,
+        file_name: singleFile.name,
+        uploaded_by: user.id,
+      });
+      setSingleStatus('done');
+      toast.success('Dokumen berhasil disimpan');
+    } catch (err: any) {
+      console.error(err);
+      setSingleStatus('error');
+      toast.error(err.message || 'Gagal mengunggah dokumen');
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
-    if (successCount > 0) toast.success(`${successCount} dokumen berhasil disimpan`);
-    if (errorCount > 0) toast.error(`${errorCount} dokumen gagal diunggah`);
   };
 
-  const readyCount = files.filter(f => f.status === 'ready').length;
-  const doneCount = files.filter(f => f.status === 'done').length;
+  const resetSingle = () => {
+    setSingleFile(null);
+    setSingleStatus('idle');
+    setSingleExtracted(null);
+    setSingleForm(emptyForm);
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Upload Dokumen</h1>
-        <p className="text-muted-foreground">Unggah dan arsipkan dokumen surat · Multi upload didukung</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Upload Dokumen</h1>
+          <p className="text-muted-foreground">Unggah dan arsipkan dokumen surat</p>
+        </div>
+        <Button
+          variant={mode === 'multi' ? 'default' : 'outline'}
+          onClick={() => setMode(mode === 'single' ? 'multi' : 'single')}
+          className="gap-2"
+        >
+          <Files className="w-4 h-4" />
+          {mode === 'single' ? 'Multi Upload' : 'Single Upload'}
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-lg">File Dokumen</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <FileUploadZone files={files} onFilesAdded={handleFilesAdded} onRemoveFile={handleRemoveFile} />
-
-            {files.length > 0 && (
-              <div className="space-y-3">
-                <Label>Pilih file untuk edit metadata:</Label>
-                <div className="flex flex-wrap gap-2">
-                  {files.map(f => (
-                    <Button
-                      key={f.id}
-                      variant={activeFileId === f.id ? 'default' : 'outline'}
-                      size="sm"
-                      className="text-xs max-w-[200px] truncate"
-                      onClick={() => setActiveFileId(f.id)}
-                    >
-                      {f.file.name.length > 25 ? f.file.name.slice(0, 22) + '...' : f.file.name}
+      {mode === 'single' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-lg">File Dokumen</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!singleFile ? (
+                <label
+                  className="flex flex-col items-center justify-center w-full h-44 border-2 border-dashed rounded-lg cursor-pointer transition-colors border-border hover:bg-muted/50"
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={handleSingleDrop}
+                >
+                  <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">Klik atau seret file ke sini</p>
+                  <p className="text-xs text-muted-foreground">PDF atau DOCX</p>
+                  <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleSingleInput} />
+                </label>
+              ) : (
+                <div className="flex items-center gap-3 p-4 rounded-md bg-muted/30 border border-border">
+                  <FileText className="w-6 h-6 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{singleFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(singleFile.size / 1024 / 1024).toFixed(2)} MB ·{' '}
+                      {singleStatus === 'extracting' && 'Mengekstrak...'}
+                      {singleStatus === 'ready' && 'Siap'}
+                      {singleStatus === 'uploading' && 'Mengunggah...'}
+                      {singleStatus === 'done' && 'Selesai'}
+                      {singleStatus === 'error' && 'Gagal'}
+                    </p>
+                  </div>
+                  {singleStatus === 'extracting' && <Loader2 className="w-5 h-5 animate-spin text-primary" />}
+                  {singleStatus === 'ready' && <CheckCircle className="w-5 h-5 text-accent" />}
+                  {singleStatus === 'done' && <CheckCircle className="w-5 h-5 text-accent" />}
+                  {(singleStatus === 'ready' || singleStatus === 'error' || singleStatus === 'done') && (
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={resetSingle}>
+                      <X className="w-4 h-4" />
                     </Button>
-                  ))}
+                  )}
                 </div>
-              </div>
-            )}
-
-            <div>
-              <Label>Jenis Surat (semua file)</Label>
-              <Select value={docType} onValueChange={(v: 'incoming' | 'outgoing') => setDocType(v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="incoming">Surat Masuk</SelectItem>
-                  <SelectItem value="outgoing">Surat Keluar</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-lg">
-              Metadata {activeFile ? `— ${activeFile.file.name.length > 30 ? activeFile.file.name.slice(0, 27) + '...' : activeFile.file.name}` : ''}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {activeData ? (
-              <MetadataForm
-                form={activeData.form}
-                metadata={activeData.extracted}
-                onChange={updateForm}
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground py-8 text-center">
-                {files.length === 0 ? 'Pilih file untuk mulai' : 'Pilih file di sebelah kiri untuk edit metadata'}
-              </p>
-            )}
-
-            <div className="mt-6 space-y-2">
-              <Button
-                className="w-full"
-                disabled={readyCount === 0 || saving}
-                onClick={handleSubmitAll}
-              >
-                {saving ? 'Mengunggah...' : `Simpan ${readyCount} Dokumen`}
-              </Button>
-              {doneCount > 0 && (
-                <p className="text-xs text-accent text-center">{doneCount} dokumen telah disimpan</p>
               )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+
+              <div>
+                <Label>Jenis Surat</Label>
+                <Select value={docType} onValueChange={(v: 'incoming' | 'outgoing') => setDocType(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="incoming">Surat Masuk</SelectItem>
+                    <SelectItem value="outgoing">Surat Keluar</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-lg">
+                Metadata {singleFile ? `— ${singleFile.name.length > 30 ? singleFile.name.slice(0, 27) + '...' : singleFile.name}` : ''}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {singleStatus !== 'idle' && singleFile ? (
+                <>
+                  <MetadataForm form={singleForm} metadata={singleExtracted} onChange={setSingleForm} />
+                  <div className="mt-6">
+                    <Button className="w-full" disabled={singleStatus !== 'ready' || saving} onClick={handleSingleSubmit}>
+                      {saving ? 'Mengunggah...' : 'Simpan Dokumen'}
+                    </Button>
+                    {singleStatus === 'done' && (
+                      <p className="text-xs text-accent text-center mt-2">Dokumen telah disimpan ✓</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground py-8 text-center">Pilih file untuk mulai</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <MultiUploadPanel docType={docType} onDocTypeChange={setDocType} />
+      )}
     </div>
   );
 }

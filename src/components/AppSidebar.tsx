@@ -11,13 +11,13 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { LayoutDashboard, Upload, Archive, BarChart3, Shield, FileText } from 'lucide-react';
+import { LayoutDashboard, Upload, Archive, Shield, FileText } from 'lucide-react';
 
 const mainItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Upload Dokumen', url: '/upload', icon: Upload, roles: ['administrator', 'umum'] },
   { title: 'Arsip Dokumen', url: '/archive', icon: Archive },
-  { title: 'Analitik', url: '/analytics', icon: BarChart3 },
+  
 ];
 
 const adminItems = [

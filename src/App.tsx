@@ -10,7 +10,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import UploadPage from "@/pages/UploadPage";
 import DocumentArchivePage from "@/pages/DocumentArchivePage";
 import DocumentDetailPage from "@/pages/DocumentDetailPage";
-import AnalyticsPage from "@/pages/AnalyticsPage";
+
 import AdminPanelPage from "@/pages/AdminPanelPage";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -38,7 +38,7 @@ function ProtectedRoutes() {
         } />
         <Route path="/archive" element={<DocumentArchivePage />} />
         <Route path="/documents/:id" element={<DocumentDetailPage />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
+        
         <Route path="/admin" element={
           employee?.role === 'administrator' ? <AdminPanelPage /> : <Navigate to="/" />
         } />
