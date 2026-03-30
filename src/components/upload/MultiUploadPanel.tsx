@@ -29,8 +29,8 @@ interface MultiFile {
 }
 
 interface MultiUploadPanelProps {
-  docType: 'incoming' | 'outgoing';
-  onDocTypeChange: (v: 'incoming' | 'outgoing') => void;
+  docType: DocumentType;
+  onDocTypeChange: (v: DocumentType) => void;
 }
 
 export default function MultiUploadPanel({ docType, onDocTypeChange }: MultiUploadPanelProps) {
@@ -203,13 +203,7 @@ export default function MultiUploadPanel({ docType, onDocTypeChange }: MultiUplo
 
             <div>
               <Label>Jenis Surat (semua file)</Label>
-              <Select value={docType} onValueChange={(v: 'incoming' | 'outgoing') => onDocTypeChange(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="incoming">Surat Masuk</SelectItem>
-                  <SelectItem value="outgoing">Surat Keluar</SelectItem>
-                </SelectContent>
-              </Select>
+              <DocTypeSelect value={docType} onValueChange={onDocTypeChange} />
             </div>
 
             {files.length > 0 && (
