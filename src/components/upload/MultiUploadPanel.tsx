@@ -5,13 +5,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { extractMetadata } from '@/services/documentParser/extractMetadata';
 import { parseDocx } from '@/services/documentParser/parseDocx';
 import { parsePdf } from '@/services/documentParser/parsePdf';
-import type { ExtractedMetadata } from '@/types/document';
+import type { ExtractedMetadata, DocumentType } from '@/types/document';
 import type { MetadataFormValues } from '@/components/upload/MetadataForm';
 import MetadataForm from '@/components/upload/MetadataForm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DocTypeSelect } from '@/components/DocTypeSelect';
 import { toast } from 'sonner';
 import { Upload, FileText, X, Loader2, CheckCircle, CheckCheck, Trash2 } from 'lucide-react';
 
