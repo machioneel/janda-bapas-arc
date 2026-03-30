@@ -1,4 +1,12 @@
-export type DocumentType = 'incoming' | 'outgoing';
+export type DocumentType = 'incoming' | 'outgoing' | 'nota_dinas' | 'laporan_litmas' | 'surat_keputusan';
+
+export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+  incoming: 'Surat Masuk',
+  outgoing: 'Surat Keluar',
+  nota_dinas: 'Nota Dinas',
+  laporan_litmas: 'Laporan Litmas',
+  surat_keputusan: 'Surat Keputusan',
+};
 
 export interface DocumentRecord {
   id: string;

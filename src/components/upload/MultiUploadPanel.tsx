@@ -5,13 +5,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { extractMetadata } from '@/services/documentParser/extractMetadata';
 import { parseDocx } from '@/services/documentParser/parseDocx';
 import { parsePdf } from '@/services/documentParser/parsePdf';
-import type { ExtractedMetadata } from '@/types/document';
+import type { ExtractedMetadata, DocumentType } from '@/types/document';
 import type { MetadataFormValues } from '@/components/upload/MetadataForm';
 import MetadataForm from '@/components/upload/MetadataForm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DocTypeSelect } from '@/components/DocTypeSelect';
 import { toast } from 'sonner';
 import { Upload, FileText, X, Loader2, CheckCircle, CheckCheck, Trash2 } from 'lucide-react';
 
@@ -29,8 +29,8 @@ interface MultiFile {
 }
 
 interface MultiUploadPanelProps {
-  docType: 'incoming' | 'outgoing';
-  onDocTypeChange: (v: 'incoming' | 'outgoing') => void;
+  docType: DocumentType;
+  onDocTypeChange: (v: DocumentType) => void;
 }
 
 export default function MultiUploadPanel({ docType, onDocTypeChange }: MultiUploadPanelProps) {
@@ -203,13 +203,7 @@ export default function MultiUploadPanel({ docType, onDocTypeChange }: MultiUplo
 
             <div>
               <Label>Jenis Surat (semua file)</Label>
-              <Select value={docType} onValueChange={(v: 'incoming' | 'outgoing') => onDocTypeChange(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="incoming">Surat Masuk</SelectItem>
-                  <SelectItem value="outgoing">Surat Keluar</SelectItem>
-                </SelectContent>
-              </Select>
+              <DocTypeSelect value={docType} onValueChange={onDocTypeChange} />
             </div>
 
             {files.length > 0 && (

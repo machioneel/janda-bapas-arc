@@ -9,20 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { toast } from 'sonner';
-import { UserCog, Shield, Eye, Users, Search, Edit2, UserPlus } from 'lucide-react';
+import { UserCog, Shield, Eye, Users, Search, Edit2, UserPlus, KeyRound } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 const ROLE_LABELS: Record<UserRole, string> = {
   administrator: 'Administrator',
   umum: 'Umum',
   viewer: 'Viewer',
-};
-
-const ROLE_COLORS: Record<UserRole, string> = {
-  administrator: 'bg-primary/10 text-primary border-primary/20',
-  umum: 'bg-accent/10 text-accent border-accent/20',
-  viewer: 'bg-muted text-muted-foreground border-border',
 };
 
 const ROLE_ICONS: Record<UserRole, typeof Shield> = {
@@ -38,32 +33,55 @@ export default function AdminPanelPage() {
   const [changingRole, setChangingRole] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
+
+  // Edit employee
   const [editingEmployee, setEditingEmployee] = useState<any>(null);
   const [editForm, setEditForm] = useState({ name: '', position: '', nip: '' });
 
-  // New user form
+  // Add user
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', nip: '', email: '', password: '123456', role: 'viewer' as UserRole, position: '' });
   const [addingUser, setAddingUser] = useState(false);
 
-  const handleRoleChange = async (employeeId: string, newRole: UserRole) => {
-    setChangingRole(employeeId);
+  // Change password
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [passwordTarget, setPasswordTarget] = useState<any>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  // Confirm toggleActive
+  const [confirmToggle, setConfirmToggle] = useState<{ id: string; current: boolean; name: string } | null>(null);
+
+  // Confirm role change
+  const [pendingRole, setPendingRole] = useState<{ id: string; role: UserRole; name: string } | null>(null);
+
+  const handleRoleChange = async (employeeId: string, newRole: UserRole, empName: string) => {
+    setPendingRole({ id: employeeId, role: newRole, name: empName });
+  };
+
+  const confirmRoleChange = async () => {
+    if (!pendingRole) return;
+    setChangingRole(pendingRole.id);
     try {
-      await updateRole.mutateAsync({ id: employeeId, role: newRole });
-      toast.success('Role berhasil diubah');
+      await updateRole.mutateAsync({ id: pendingRole.id, role: pendingRole.role });
+      toast.success(`Role ${pendingRole.name} berhasil diubah menjadi ${ROLE_LABELS[pendingRole.role]}`);
     } catch {
       toast.error('Gagal mengubah role');
     } finally {
       setChangingRole(null);
+      setPendingRole(null);
     }
   };
 
-  const handleToggleActive = async (employeeId: string, currentStatus: boolean) => {
+  const handleToggleActive = async () => {
+    if (!confirmToggle) return;
     try {
-      await updateEmployee.mutateAsync({ id: employeeId, is_active: !currentStatus });
-      toast.success(currentStatus ? 'Pengguna dinonaktifkan' : 'Pengguna diaktifkan');
+      await updateEmployee.mutateAsync({ id: confirmToggle.id, is_active: !confirmToggle.current });
+      toast.success(confirmToggle.current ? `${confirmToggle.name} berhasil dinonaktifkan` : `${confirmToggle.name} berhasil diaktifkan`);
     } catch {
       toast.error('Gagal mengubah status');
+    } finally {
+      setConfirmToggle(null);
     }
   };
 
@@ -101,6 +119,33 @@ export default function AdminPanelPage() {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (!passwordTarget || !newPassword) {
+      toast.error('Password baru wajib diisi');
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error('Password minimal 6 karakter');
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: { action: 'change_password', user_id: passwordTarget.id, new_password: newPassword },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Password ${passwordTarget.name} berhasil diubah`);
+      setShowPasswordDialog(false);
+      setNewPassword('');
+      setPasswordTarget(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal mengubah password');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   const filtered = (employees ?? []).filter(emp => {
     const matchSearch = !searchQuery ||
       emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -119,10 +164,12 @@ export default function AdminPanelPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Users className="w-7 h-7 text-primary" />
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Users className="w-5 h-5 text-primary" />
+          </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Admin Panel</h1>
-            <p className="text-muted-foreground">Kelola pengguna dan hak akses</p>
+            <p className="text-sm text-muted-foreground">Kelola pengguna dan hak akses</p>
           </div>
         </div>
         <Dialog open={showAddUser} onOpenChange={setShowAddUser}>
@@ -179,7 +226,7 @@ export default function AdminPanelPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <Card className="border-border">
+        <Card className="border-border bg-card">
           <CardContent className="pt-4 pb-3">
             <p className="text-sm text-muted-foreground">Total Pengguna</p>
             <p className="text-2xl font-bold text-foreground">{employees?.length ?? 0}</p>
@@ -188,9 +235,11 @@ export default function AdminPanelPage() {
         {(['administrator', 'umum', 'viewer'] as UserRole[]).map(role => {
           const Icon = ROLE_ICONS[role];
           return (
-            <Card key={role} className="border-border">
+            <Card key={role} className="border-border bg-card">
               <CardContent className="pt-4 pb-3 flex items-center gap-3">
-                <Icon className="w-5 h-5 text-primary" />
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Icon className="w-4 h-4 text-primary" />
+                </div>
                 <div>
                   <p className="text-sm text-muted-foreground">{ROLE_LABELS[role]}</p>
                   <p className="text-2xl font-bold text-foreground">{roleCounts[role] ?? 0}</p>
@@ -201,18 +250,13 @@ export default function AdminPanelPage() {
         })}
       </div>
 
-      {/* Filters */}
+      {/* Table */}
       <Card className="border-border">
         <CardHeader className="pb-3">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Cari nama, NIP, atau email..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
+              <Input placeholder="Cari nama, NIP, atau email..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-10" />
             </div>
             <Select value={filterRole} onValueChange={setFilterRole}>
               <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
@@ -259,7 +303,11 @@ export default function AdminPanelPage() {
                         <TableCell className="text-sm text-muted-foreground">{emp.email}</TableCell>
                         <TableCell className="text-sm">{emp.position || '-'}</TableCell>
                         <TableCell>
-                          <Select value={emp.role} onValueChange={(v: UserRole) => handleRoleChange(emp.id, v)} disabled={changingRole === emp.id}>
+                          <Select
+                            value={emp.role}
+                            onValueChange={(v: UserRole) => handleRoleChange(emp.id, v, emp.name)}
+                            disabled={changingRole === emp.id}
+                          >
                             <SelectTrigger className="w-[140px] h-8 text-xs">
                               <div className="flex items-center gap-1.5">
                                 <RoleIcon className="w-3.5 h-3.5" />
@@ -276,24 +324,28 @@ export default function AdminPanelPage() {
                         <TableCell>
                           <Badge
                             variant={emp.is_active ? 'default' : 'secondary'}
-                            className={`text-xs cursor-pointer`}
-                            onClick={() => handleToggleActive(emp.id, emp.is_active)}
+                            className="text-xs cursor-pointer"
+                            onClick={() => setConfirmToggle({ id: emp.id, current: emp.is_active, name: emp.name })}
                           >
                             {emp.is_active ? 'Aktif' : 'Nonaktif'}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() => {
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Edit" onClick={() => {
                               setEditingEmployee(emp);
                               setEditForm({ name: emp.name, position: emp.position || '', nip: emp.nip });
-                            }}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
+                            }}>
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Ganti Password" onClick={() => {
+                              setPasswordTarget(emp);
+                              setNewPassword('');
+                              setShowPasswordDialog(true);
+                            }}>
+                              <KeyRound className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -324,6 +376,45 @@ export default function AdminPanelPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Password Dialog */}
+      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ganti Password — {passwordTarget?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1">
+              <Label>Password Baru</Label>
+              <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Minimal 6 karakter" />
+            </div>
+            <Button className="w-full" onClick={handleChangePassword} disabled={changingPassword}>
+              {changingPassword ? 'Menyimpan...' : 'Simpan Password'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Toggle Active */}
+      <ConfirmDialog
+        open={!!confirmToggle}
+        onOpenChange={(open) => !open && setConfirmToggle(null)}
+        title={confirmToggle?.current ? 'Nonaktifkan Pengguna' : 'Aktifkan Pengguna'}
+        description={`Apakah Anda yakin ingin ${confirmToggle?.current ? 'menonaktifkan' : 'mengaktifkan'} ${confirmToggle?.name}?`}
+        confirmLabel={confirmToggle?.current ? 'Nonaktifkan' : 'Aktifkan'}
+        variant={confirmToggle?.current ? 'destructive' : 'default'}
+        onConfirm={handleToggleActive}
+      />
+
+      {/* Confirm Role Change */}
+      <ConfirmDialog
+        open={!!pendingRole}
+        onOpenChange={(open) => !open && setPendingRole(null)}
+        title="Ubah Role Pengguna"
+        description={`Ubah role ${pendingRole?.name} menjadi ${pendingRole ? ROLE_LABELS[pendingRole.role] : ''}?`}
+        confirmLabel="Ubah Role"
+        onConfirm={confirmRoleChange}
+      />
     </div>
   );
 }
