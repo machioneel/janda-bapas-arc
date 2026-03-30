@@ -3,8 +3,12 @@ import { useDocumentById, useDeleteDocument } from '@/hooks/useDocuments';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { DOCUMENT_TYPE_LABELS } from '@/types/document';
+import type { DocumentType } from '@/types/document';
 import { ArrowLeft, Download, Trash2, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { useState } from 'react';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 export default function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -12,6 +16,7 @@ export default function DocumentDetailPage() {
   const { employee } = useAuth();
   const { data: doc, isLoading } = useDocumentById(id || '');
   const deleteDoc = useDeleteDocument();
+  const [showDelete, setShowDelete] = useState(false);
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-64 text-muted-foreground">Memuat...</div>;
@@ -22,10 +27,9 @@ export default function DocumentDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Yakin ingin menghapus dokumen ini?')) return;
     try {
       await deleteDoc.mutateAsync(doc.id);
-      toast.success('Dokumen dihapus');
+      toast.success('Dokumen berhasil dihapus');
       navigate('/archive');
     } catch {
       toast.error('Gagal menghapus dokumen');
@@ -39,7 +43,7 @@ export default function DocumentDetailPage() {
     { label: 'Penerima', value: doc.receiver },
     { label: 'Perihal', value: doc.subject },
     { label: 'Klasifikasi', value: doc.classification },
-    { label: 'Jenis', value: doc.document_type === 'incoming' ? 'Surat Masuk' : 'Surat Keluar' },
+    { label: 'Jenis', value: DOCUMENT_TYPE_LABELS[doc.document_type as DocumentType] || doc.document_type },
     { label: 'Tanggal Upload', value: new Date(doc.created_at).toLocaleDateString('id-ID') },
   ];
 
@@ -55,18 +59,15 @@ export default function DocumentDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Metadata */}
         <Card className="border-border">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg">Metadata</CardTitle>
             <div className="flex gap-2">
               <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" size="sm">
-                  <Download className="w-4 h-4 mr-1" /> Unduh
-                </Button>
+                <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-1" /> Unduh</Button>
               </a>
               {employee?.role === 'administrator' && (
-                <Button variant="destructive" size="sm" onClick={handleDelete}>
+                <Button variant="destructive" size="sm" onClick={() => setShowDelete(true)}>
                   <Trash2 className="w-4 h-4 mr-1" /> Hapus
                 </Button>
               )}
@@ -84,18 +85,13 @@ export default function DocumentDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Preview */}
         <Card className="border-border">
           <CardHeader>
             <CardTitle className="text-lg">Pratinjau Dokumen</CardTitle>
           </CardHeader>
           <CardContent>
             {isPdf ? (
-              <iframe
-                src={doc.file_url}
-                className="w-full h-[500px] rounded border border-border"
-                title="Document preview"
-              />
+              <iframe src={doc.file_url} className="w-full h-[500px] rounded-lg border border-border" title="Document preview" />
             ) : (
               <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
                 <ExternalLink className="w-8 h-8 mb-2" />
@@ -108,6 +104,16 @@ export default function DocumentDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={showDelete}
+        onOpenChange={setShowDelete}
+        title="Hapus Dokumen"
+        description={`Apakah Anda yakin ingin menghapus "${doc.file_name}"? Tindakan ini tidak dapat dibatalkan.`}
+        confirmLabel="Hapus"
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

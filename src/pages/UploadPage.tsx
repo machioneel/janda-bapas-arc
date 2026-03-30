@@ -5,11 +5,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { extractMetadata } from '@/services/documentParser/extractMetadata';
 import { parseDocx } from '@/services/documentParser/parseDocx';
 import { parsePdf } from '@/services/documentParser/parsePdf';
-import type { ExtractedMetadata } from '@/types/document';
+import type { ExtractedMetadata, DocumentType } from '@/types/document';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DocTypeSelect } from '@/components/DocTypeSelect';
 import { toast } from 'sonner';
 import MetadataForm, { type MetadataFormValues } from '@/components/upload/MetadataForm';
 import MultiUploadPanel from '@/components/upload/MultiUploadPanel';
@@ -26,13 +26,11 @@ export default function UploadPage() {
   const createDocument = useCreateDocument();
 
   const [mode, setMode] = useState<'single' | 'multi'>('single');
-
-  // Single upload state
   const [singleFile, setSingleFile] = useState<File | null>(null);
   const [singleStatus, setSingleStatus] = useState<SingleStatus>('idle');
   const [singleExtracted, setSingleExtracted] = useState<ExtractedMetadata | null>(null);
   const [singleForm, setSingleForm] = useState<MetadataFormValues>(emptyForm);
-  const [docType, setDocType] = useState<'incoming' | 'outgoing'>('incoming');
+  const [docType, setDocType] = useState<DocumentType>('incoming');
   const [saving, setSaving] = useState(false);
 
   const handleSingleFile = useCallback(async (file: File) => {
@@ -58,9 +56,11 @@ export default function UploadPage() {
         classification: extracted.classification.value,
       });
       setSingleStatus('ready');
+      toast.success('Metadata berhasil diekstrak');
     } catch (err) {
       console.error('Extraction error:', err);
       setSingleStatus('error');
+      toast.error('Gagal mengekstrak metadata');
     }
   }, []);
 
@@ -124,7 +124,7 @@ export default function UploadPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Upload Dokumen</h1>
-          <p className="text-muted-foreground">Unggah dan arsipkan dokumen surat</p>
+          <p className="text-sm text-muted-foreground">Unggah dan arsipkan dokumen surat</p>
         </div>
         <Button
           variant={mode === 'multi' ? 'default' : 'outline'}
@@ -145,18 +145,22 @@ export default function UploadPage() {
             <CardContent className="space-y-4">
               {!singleFile ? (
                 <label
-                  className="flex flex-col items-center justify-center w-full h-44 border-2 border-dashed rounded-lg cursor-pointer transition-colors border-border hover:bg-muted/50"
+                  className="flex flex-col items-center justify-center w-full h-44 border-2 border-dashed rounded-xl cursor-pointer transition-all border-border hover:border-primary/50 hover:bg-primary/5"
                   onDragOver={e => e.preventDefault()}
                   onDrop={handleSingleDrop}
                 >
-                  <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">Klik atau seret file ke sini</p>
-                  <p className="text-xs text-muted-foreground">PDF atau DOCX</p>
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
+                    <Upload className="h-6 w-6 text-primary" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground">Klik atau seret file ke sini</p>
+                  <p className="text-xs text-muted-foreground mt-1">PDF atau DOCX</p>
                   <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleSingleInput} />
                 </label>
               ) : (
-                <div className="flex items-center gap-3 p-4 rounded-md bg-muted/30 border border-border">
-                  <FileText className="w-6 h-6 text-primary shrink-0" />
+                <div className="flex items-center gap-3 p-4 rounded-xl bg-muted/30 border border-border">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5 text-primary" />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{singleFile.name}</p>
                     <p className="text-xs text-muted-foreground">
@@ -169,8 +173,7 @@ export default function UploadPage() {
                     </p>
                   </div>
                   {singleStatus === 'extracting' && <Loader2 className="w-5 h-5 animate-spin text-primary" />}
-                  {singleStatus === 'ready' && <CheckCircle className="w-5 h-5 text-accent" />}
-                  {singleStatus === 'done' && <CheckCircle className="w-5 h-5 text-accent" />}
+                  {(singleStatus === 'ready' || singleStatus === 'done') && <CheckCircle className="w-5 h-5 text-accent" />}
                   {(singleStatus === 'ready' || singleStatus === 'error' || singleStatus === 'done') && (
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={resetSingle}>
                       <X className="w-4 h-4" />
@@ -181,13 +184,7 @@ export default function UploadPage() {
 
               <div>
                 <Label>Jenis Surat</Label>
-                <Select value={docType} onValueChange={(v: 'incoming' | 'outgoing') => setDocType(v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="incoming">Surat Masuk</SelectItem>
-                    <SelectItem value="outgoing">Surat Keluar</SelectItem>
-                  </SelectContent>
-                </Select>
+                <DocTypeSelect value={docType} onValueChange={setDocType} />
               </div>
             </CardContent>
           </Card>
@@ -212,7 +209,10 @@ export default function UploadPage() {
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground py-8 text-center">Pilih file untuk mulai</p>
+                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                  <FileText className="w-10 h-10 mb-3 opacity-30" />
+                  <p className="text-sm">Pilih file untuk mulai</p>
+                </div>
               )}
             </CardContent>
           </Card>
